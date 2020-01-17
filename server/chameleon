@@ -1,0 +1,80 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# Copyright 2017, A10 Networks
+# Author: Mike Thompson: @mike @t @a10@networks!comchdir
+#
+import argparse
+import os
+import signal
+import sys
+
+from subprocess import Popen
+
+CHPATH = "/opt/C2DEF/server"
+os.chdir(CHPATH)
+sys.path.append(CHPATH)
+
+
+class Manager(object): #Basic quick and dirty manager
+
+    def __init__(self):
+        self.count = 0
+
+    @classmethod
+    def start(self):
+        # lets start_it up.
+        #changing this for lab. 
+        #Popen(['python cerver.py > /tmp/chameleon.log; disown %1'], shell=True,
+        #             stdin=None, stdout=None, stderr=None, close_fds=True)
+        Popen(['python cerver.py'], shell=True,
+                     stdin=None, stdout=None, stderr=None, close_fds=True)
+        p = os.popen('iptables -A OUTPUT  -m tos ! --tos 0xA0  -p tcp --tcp-flags RST RST -j DROP')
+        p.close()
+
+    @classmethod
+    def stop(self):
+        x = os.popen('pkill -9 -f cerver')
+        x.close()
+        p = os.popen('iptables -D OUTPUT  -m tos ! --tos 0xA0  -p tcp --tcp-flags RST RST -j DROP')
+        p.close()
+
+    def receive_signal(self, signum, stack):
+        if signum in [1,2,3,15]:
+            x = os.popen('pkill -9 -f cerver')
+            x.close()
+
+    def set_signals(self):
+        uncatchable = ['SIG_DFL', 'SIGSTOP', 'SIGKILL']
+        for i in [x for x in dir(signal) if x.startswith("SIG")]:
+            if not i in uncatchable:
+                signum = getattr(signal, i)
+                signal.signal(signum, sig_c.receive_signal)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--start', dest='start', action='store_true', help='start chameleon does a restart if already started')
+    parser.add_argument('--stop', dest='stop', action='store_true', help='stop chameleon')
+
+    args = parser.parse_args()
+    print args
+    if args.start and args.stop is False:
+        Manager().stop()
+        Manager().start()
+    elif args.stop and args.start is False:
+        Manager().stop()
+    elif args.stop and args.start:
+        parser.print_help()
+        exit(0)
+    else:
+        Manager().stop()
+        Manager().start()
+
+
+
+
+
+
+
+
+
+

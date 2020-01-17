@@ -1,0 +1,119 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# Copyright 2017, A10 Networks
+# Author: Mike Thompson: @mike @t @a10@networks!com
+#
+
+import re
+import requests
+import time
+import binascii
+import struct
+import chardet
+import argparse
+import json
+import config
+
+re1 = re.compile(r"data=\'(.+)\'\), \'", re.DOTALL)
+class GetSamples(object):
+
+    def __init__(self, samples_id, new_label):
+        self.new = new_label
+        self.old = samples_id
+        self.f = new_label
+        self.username = config.username
+        self.password = config.password
+        self.base_url = config.base_url
+        self.auth_url = "/_xpack/security/_authenticate"
+        self.oauth_url = "/_xpack/security/oauth2/token"
+        self.date = str(int(time.time()*1000))
+        self.load_investigate()
+        self.current_label = None
+
+    def split_hex(self, value):
+        value = value[2:] if len(value) % 2 == 0 else "0" + value[2:]
+        return " ".join(value[i:i + 2] for i in range(0, len(value), 2))
+
+    def unpack_from(self, fmt, data, offset=0):
+        (byte_order, fmt, args) = (fmt[0], fmt[1:], ()) if fmt and fmt[0] in ('@', '=', '<', '>', '!') else (
+        '@', fmt, ())
+        fmt = filter(None, re.sub("p", "\tp\t", fmt).split('\t'))
+        for sub_fmt in fmt:
+            if sub_fmt == 'p':
+                (str_len,) = struct.unpack_from('B', data, offset)
+                sub_fmt = str(str_len + 1) + 'p'
+                sub_size = str_len + 1
+            else:
+                sub_fmt = byte_order + sub_fmt
+                sub_size = struct.calcsize(sub_fmt)
+            args += struct.unpack_from(sub_fmt, data, offset)
+            offset += sub_size
+        return args
+
+    def load_investigate(self):
+        d = []
+
+        evidence = self.get()
+        evi = (evidence.json())
+        print evi
+
+        x = 0
+        s = set()
+        cd = []
+
+        for k,v in  evi['_source'].items():
+            if k == 'raw_packet':
+                try:
+                    r = re.findall(re1, v)
+
+                    if len(r) == 1:
+                        try:
+                            a = r[0].decode(chardet.detect(r[0])['encoding'])
+                        except:
+                            a = r[0].decode('unicode_escape').encode('utf-8')
+                    s.add(a)
+                except BaseException as e:
+                    pass
+                    #print e, len(re.findall(re1, v)), re.findall(re1, v)
+                   # print "lalala",v
+        have_sample = False
+        for i in s:
+            z= {"payload": json.dumps(i, indent=4), 'labels':[self.new], "confirmed":True, "old_label": self.old}
+            d.append(z)
+            x = x + 1
+        with open("enabled/"+self.new+"_id_"+self.old+".py" , 'w') as f:
+            w = "samples = %s" % d
+            f.write(w)
+
+
+    def http_session(self):
+        return requests.Session()
+
+    def session_auth(self):
+        session = self.http_session()
+        session.auth = (self.username, self.password)
+        auth = session.post(self.base_url + self.auth_url)
+        return session
+
+    def get(self):
+        session = self.session_auth()
+        # session.post(self.url + path, data=data)
+
+        return session.get(self.base_url + "/chameleon/sensors/{_id}".format(_id=self.old))
+
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', action='store',
+                      dest='old',
+                      required=True,
+                      help='space seperated strings, old labels that was utilized in the prior model')
+    parser.add_argument('-l',
+                        dest='label',
+                        required=True,
+                        help='single string new label that will utilized in the prior model')
+    args = parser.parse_args()
+    GetSamples(args.old, args.label)
+
+
