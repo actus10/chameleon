@@ -47,9 +47,9 @@ Note: Documentation below this line will be update often. There may be slight dr
 
 `cd /opt` 
 
-`git clone https://github.com/a10networks/C2DEF.git`
+`https://github.com/actus10/chameleon`
 
-`cd /opt/C2DEF`
+`cd /opt/chameleon`
 
 `bash installer.sh`
 
